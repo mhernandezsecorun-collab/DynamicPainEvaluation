@@ -136,7 +136,7 @@
         </div>
     </div>
 
-    <div class="timer" id="timerLabel">Tiempo: 00:00 / 05:00</div>
+    <div class="timer" id="timerLabel">Time: 00:00 / 05:00</div>
     <button id="btnAction" onclick="iniciarPrueba()">START</button>
 
     <div id="chartContainer">
@@ -144,10 +144,11 @@
     </div>
 
     <script>
-        const DURATION = 300; // 5 min
+        const DURATION = 300; // 5 minutos exactos (300 s)
         let timer = null;
         let elapsed = 0;
         let dataLog = [];
+
         const slider = document.getElementById('vasSlider');
         const vasValue = document.getElementById('vasValue');
         const timerLabel = document.getElementById('timerLabel');
@@ -171,23 +172,29 @@
             // Registro en tiempo real (1 Hz)
             timer = setInterval(() => {
                 elapsed++;
-                dataLog.push({ time: elapsed, value: parseInt(slider.value) });
+                // Guardamos usando las claves 'tiempo' y 'valor'
+                dataLog.push({ tiempo: elapsed, valor: parseInt(slider.value) });
 
                 let mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
                 let secs = String(elapsed % 60).padStart(2, '0');
-                timerLabel.innerText = `Tiempo: ${mins}:${secs} / 05:00`;
+                timerLabel.innerText = `Time: ${mins}:${secs} / 05:00`;
 
+                // Detener al cumplir exactamente 5 minutos
                 if (elapsed >= DURATION) {
-                    Finish();
+                    finalizarPrueba();
                 }
             }, 1000);
         }
 
         function finalizarPrueba() {
-            clearInterval(timer);
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+
             slider.disabled = true;
             btnAction.disabled = false;
-            btnAction.innerText = "STAR NEW";
+            btnAction.innerText = "START NEW";
             timerLabel.innerText = "FINISH";
 
             descargarCSV();
@@ -195,32 +202,40 @@
         }
 
         function descargarCSV() {
-            let csvContent = "data:text/xlsx;charset=utf-8,Tiempo_Segundos,Intensidad_VAS\n";
+            let csvContent = "Time_Seconds,Pain_VAS\r\n";
             dataLog.forEach(row => {
-                csvContent += `${row.tiempo},${row.valor}\n`;
+                csvContent += `${row.tiempo},${row.valor}\r\n`;
             });
-            const encodedUri = encodeURI(csvContent);
+
+            // Descarga limpia mediante Blob compatible con navegadores móviles y de escritorio
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
-            const timestamp = new Date().toISOString().slice(0,19).replace(/[-:T]/g,"_");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", `dinamicpain_${timestamp}.xlsx`);
+            
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "_");
+            link.href = url;
+            link.download = `dynamicpain_${timestamp}.csv`;
+            
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            URL.revokeObjectURL(url);
         }
 
         function mostrarGrafico() {
             chartContainer.style.display = "block";
             const ctx = document.getElementById('painChart').getContext('2d');
             
-            if (window.myChart) { window.myChart.destroy(); }
+            if (window.myChart) { 
+                window.myChart.destroy(); 
+            }
 
             window.myChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: dataLog.map(d => d.tiempo),
                     datasets: [{
-                        label: 'Pain Intensity',
+                        label: 'Pain Intensity (VAS)',
                         data: dataLog.map(d => d.valor),
                         borderColor: '#C2820E',
                         backgroundColor: 'rgba(255, 248, 179, 0.5)',
@@ -230,9 +245,16 @@
                     }]
                 },
                 options: {
+                    responsive: true,
                     scales: {
-                        y: { min: 0, max: 100, title: { display: true, text: 'Dolor (0-100)' } },
-                        x: { title: { display: true, text: 'Segundos' } }
+                        y: { 
+                            min: 0, 
+                            max: 100, 
+                            title: { display: true, text: 'Pain (0-100)' } 
+                        },
+                        x: { 
+                            title: { display: true, text: 'Seconds' } 
+                        }
                     }
                 }
             });
