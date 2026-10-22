@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Dinamic Pain Evaluation</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Book Antiqua", Roboto, Helvetica, Arial, sans-serif;
+            background: #FFFFFF;
+            color: #222222;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .header img {
+            max-height: 80px;
+            margin-bottom: 15px;
+        }
+        h2 {
+            font-size: 1.1rem;
+            text-align: center;
+            margin: 0 0 25px 0;
+            font-weight: 600;
+        }
+        .vas-container {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+        .labels {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            font-size: 0.85rem;
+            font-weight: bold;
+        }
+        .lbl-min { color: #000000; text-align: left; }
+        .lbl-max { color: #000000; text-align: right; }
+        .slider-wrapper {
+            position: relative;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .vas-value {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #333333;
+            margin-bottom: 8px;
+        }
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 18px;
+            border-radius: 9px;
+            background: linear-gradient(to right, #FFF8B3, #C2820E);
+            outline: none;
+            border: 1px solid #D5CA9C;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #FFFFFF;
+            border: 3px solid #9B6400;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-moz-range-thumb {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #FFFFFF;
+            border: 3px solid #9B6400;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .timer {
+            font-size: 1.4rem;
+            font-weight: bold;
+            margin: 25px 0 15px 0;
+            color: #333333;
+        }
+        button {
+            background-color: #C2820E;
+            color: #FFFFFF;
+            border: none;
+            padding: 14px 28px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            max-width: 300px;
+        }
+        button:disabled {
+            background-color: #CCCCCC;
+            cursor: not-allowed;
+        }
+        #chartContainer {
+            width: 100%;
+            max-width: 500px;
+            margin-top: 20px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <img src="logo_nip.png" alt="Logo NIP" onerror="this.style.display='none'">
+    </div>
+
+    <h2>Please indicate your level of pain in real time by moving the slider.</h2>
+
+    <div class="vas-container">
+        <div class="slider-wrapper">
+            <div id="vasValue" class="vas-value">0</div>
+            <input type="range" id="vasSlider" min="0" max="100" value="0" disabled>
+        </div>
+        <div class="labels">
+            <span class="lbl-min">No Pain<br>(0)</span>
+            <span class="lbl-max">Worst Pain<br>(100)</span>
+        </div>
+    </div>
+
+    <div class="timer" id="timerLabel">Tiempo: 00:00 / 05:00</div>
+    <button id="btnAction" onclick="iniciarPrueba()">START</button>
+
+    <div id="chartContainer">
+        <canvas id="painChart"></canvas>
+    </div>
+
+    <script>
+        const DURATION = 300; // 5 min
+        let timer = null;
+        let elapsed = 0;
+        let dataLog = [];
+        const slider = document.getElementById('vasSlider');
+        const vasValue = document.getElementById('vasValue');
+        const timerLabel = document.getElementById('timerLabel');
+        const btnAction = document.getElementById('btnAction');
+        const chartContainer = document.getElementById('chartContainer');
+
+        slider.addEventListener('input', (e) => {
+            vasValue.innerText = e.target.value;
+        });
+
+        function iniciarPrueba() {
+            dataLog = [];
+            elapsed = 0;
+            slider.disabled = false;
+            slider.value = 0;
+            vasValue.innerText = "0";
+            btnAction.disabled = true;
+            btnAction.innerText = "IN PROGRESS...";
+            chartContainer.style.display = "none";
+
+            // Registro en tiempo real (1 Hz)
+            timer = setInterval(() => {
+                elapsed++;
+                dataLog.push({ time: elapsed, value: parseInt(slider.value) });
+
+                let mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
+                let secs = String(elapsed % 60).padStart(2, '0');
+                timerLabel.innerText = `Tiempo: ${mins}:${secs} / 05:00`;
+
+                if (elapsed >= DURATION) {
+                    Finish();
+                }
+            }, 1000);
+        }
+
+        function finalizarPrueba() {
+            clearInterval(timer);
+            slider.disabled = true;
+            btnAction.disabled = false;
+            btnAction.innerText = "STAR NEW";
+            timerLabel.innerText = "FINISH";
+
+            descargarCSV();
+            mostrarGrafico();
+        }
+
+        function descargarCSV() {
+            let csvContent = "data:text/xlsx;charset=utf-8,Tiempo_Segundos,Intensidad_VAS\n";
+            dataLog.forEach(row => {
+                csvContent += `${row.tiempo},${row.valor}\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            const timestamp = new Date().toISOString().slice(0,19).replace(/[-:T]/g,"_");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `dinamicpain_${timestamp}.xlsx`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function mostrarGrafico() {
+            chartContainer.style.display = "block";
+            const ctx = document.getElementById('painChart').getContext('2d');
+            
+            if (window.myChart) { window.myChart.destroy(); }
+
+            window.myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dataLog.map(d => d.tiempo),
+                    datasets: [{
+                        label: 'Pain Intensity',
+                        data: dataLog.map(d => d.valor),
+                        borderColor: '#C2820E',
+                        backgroundColor: 'rgba(255, 248, 179, 0.5)',
+                        fill: true,
+                        tension: 0.2,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: { min: 0, max: 100, title: { display: true, text: 'Dolor (0-100)' } },
+                        x: { title: { display: true, text: 'Segundos' } }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
