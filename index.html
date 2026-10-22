@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -54,7 +54,7 @@
             align-items: center;
         }
         .vas-value {
-            font-size: 1.2rem;
+            font-size: 1.3rem;
             font-weight: bold;
             color: #333333;
             margin-bottom: 8px;
@@ -62,39 +62,38 @@
         input[type=range] {
             -webkit-appearance: none;
             width: 100%;
-            height: 18px;
-            border-radius: 9px;
+            height: 20px;
+            border-radius: 10px;
             background: linear-gradient(to right, #FFF8B3, #C2820E);
             outline: none;
             border: 1px solid #D5CA9C;
         }
         input[type=range]::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 32px;
-            height: 32px;
+            width: 34px;
+            height: 34px;
             border-radius: 50%;
             background: #FFFFFF;
             border: 3px solid #9B6400;
             cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.25);
         }
         input[type=range]::-moz-range-thumb {
-            width: 32px;
-            height: 32px;
+            width: 34px;
+            height: 34px;
             border-radius: 50%;
             background: #FFFFFF;
             border: 3px solid #9B6400;
             cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.25);
         }
         .timer {
-            font-size: 1.4rem;
+            font-size: 1.5rem;
             font-weight: bold;
             margin: 25px 0 15px 0;
             color: #333333;
         }
         button {
-            background-color: #C2820E;
             color: #FFFFFF;
             border: none;
             padding: 14px 28px;
@@ -104,15 +103,18 @@
             cursor: pointer;
             width: 100%;
             max-width: 300px;
+            transition: background-color 0.2s;
         }
-        button:disabled {
-            background-color: #CCCCCC;
-            cursor: not-allowed;
+        .btn-start {
+            background-color: #C2820E;
+        }
+        .btn-stop {
+            background-color: #B03A2E;
         }
         #chartContainer {
             width: 100%;
             max-width: 500px;
-            margin-top: 20px;
+            margin-top: 25px;
             display: none;
         }
     </style>
@@ -137,16 +139,18 @@
     </div>
 
     <div class="timer" id="timerLabel">Time: 00:00 / 05:00</div>
-    <button id="btnAction" onclick="iniciarPrueba()">START</button>
+    <button id="btnAction" class="btn-start" onclick="gestionarPrueba()">START</button>
 
     <div id="chartContainer">
         <canvas id="painChart"></canvas>
     </div>
 
     <script>
-        const DURATION = 300; // 5 minutos exactos (300 s)
-        let timer = null;
-        let elapsed = 0;
+        const DURATION_SECONDS = 300; // 5 minutos exactos
+        let isRunning = false;
+        let timerInterval = null;
+        let startTime = null;
+        let lastRecordedSec = -1;
         let dataLog = [];
 
         const slider = document.getElementById('vasSlider');
@@ -159,46 +163,77 @@
             vasValue.innerText = e.target.value;
         });
 
-        function iniciarPrueba() {
+        function gestionarPrueba() {
+            if (!isRunning) {
+                iniciar();
+            } else {
+                detener();
+            }
+        }
+
+        function iniciar() {
+            isRunning = true;
             dataLog = [];
-            elapsed = 0;
+            lastRecordedSec = -1;
+            startTime = Date.now();
+
             slider.disabled = false;
             slider.value = 0;
             vasValue.innerText = "0";
-            btnAction.disabled = true;
-            btnAction.innerText = "IN PROGRESS...";
+
+            btnAction.innerText = "STOP & SAVE";
+            btnAction.className = "btn-stop";
             chartContainer.style.display = "none";
 
-            // Registro en tiempo real (1 Hz)
-            timer = setInterval(() => {
-                elapsed++;
-                // Guardamos usando las claves 'tiempo' y 'valor'
-                dataLog.push({ tiempo: elapsed, valor: parseInt(slider.value) });
+            // Registro basado en hora de reloj real para evitar retrasos por suspensión
+            timerInterval = setInterval(() => {
+                const elapsedTotalSecs = Math.floor((Date.now() - startTime) / 1000);
 
-                let mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
-                let secs = String(elapsed % 60).padStart(2, '0');
+                // Graba exactamente 1 muestra por segundo (1 Hz)
+                if (elapsedTotalSecs > lastRecordedSec) {
+                    lastRecordedSec = elapsedTotalSecs;
+                    dataLog.push({ tiempo: elapsedTotalSecs, valor: parseInt(slider.value) });
+                }
+
+                // Renderiza tiempo transcurrido
+                let mins = String(Math.floor(elapsedTotalSecs / 60)).padStart(2, '0');
+                let secs = String(elapsedTotalSecs % 60).padStart(2, '0');
                 timerLabel.innerText = `Time: ${mins}:${secs} / 05:00`;
 
-                // Detener al cumplir exactamente 5 minutos
-                if (elapsed >= DURATION) {
-                    finalizarPrueba();
+                // Parada obligatoria a los 5 minutos (300 segundos)
+                if (elapsedTotalSecs >= DURATION_SECONDS) {
+                    detener();
                 }
-            }, 1000);
+            }, 200);
         }
 
-        function finalizarPrueba() {
-            if (timer) {
-                clearInterval(timer);
-                timer = null;
+        function detener() {
+            // 1. Detener el reloj primero sin importar nada más
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
             }
+            isRunning = false;
 
             slider.disabled = true;
-            btnAction.disabled = false;
             btnAction.innerText = "START NEW";
-            timerLabel.innerText = "FINISH";
+            btnAction.className = "btn-start";
+            timerLabel.innerText = "FINISHED";
 
-            descargarCSV();
-            mostrarGrafico();
+            // 2. Procesar datos de forma aislada para que ningún fallo impida parar el reloj
+            if (dataLog.length > 0) {
+                try {
+                    descargarCSV();
+                } catch (e) {
+                    console.error("Error al descargar CSV:", e);
+                }
+
+                try {
+                    mostrarGrafico();
+                } catch (e) {
+                    console.error("Error al renderizar gráfico:", e);
+                }
+            }
         }
 
         function descargarCSV() {
@@ -207,7 +242,6 @@
                 csvContent += `${row.tiempo},${row.valor}\r\n`;
             });
 
-            // Descarga limpia mediante Blob compatible con navegadores móviles y de escritorio
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
@@ -219,7 +253,7 @@
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            URL.revokeObjectURL(url);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
 
         function mostrarGrafico() {
